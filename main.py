@@ -47,6 +47,7 @@ class RainAgent:
 
     def setup(self):
         self.llm.setup(self.system_prompt)
+        print(f"[DEBUG] system_prompt长度: {len(self.system_prompt)}")
         atexit.register(self.shutdown)
 
     def shutdown(self):
@@ -55,7 +56,6 @@ class RainAgent:
         self.system_prompt = self.system_prompt.replace(self.tools_prompt, "{tools}")
         self.system_prompt = self.system_prompt.replace(self.environment_prompt, "{system}")
         self.system_prompt = self.system_prompt.replace(self.work_space_prompt_dir, "{work_dir}")
-        self.system_prompt = self.system_prompt.replace(self.work_space_prompt_list, "{file_list}")
         file_util.write_file(constant.SYSTEM_PROMPT_TEXT_PATH, self.system_prompt, type=0)
 
 

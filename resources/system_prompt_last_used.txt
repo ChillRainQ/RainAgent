@@ -130,8 +130,6 @@ AgentSpace: D:/AgentSpace
 ## 工作目录
 D:/AgentSpace
 
-## 工作目录下的文件列表
-{file_list}
 
 ## 输出格式
 根据用户意图选择以下三种输出之一:

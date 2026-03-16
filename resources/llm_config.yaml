@@ -2,7 +2,7 @@ default: local
 current: local
 local:
   list:
-    current: "qwen3.5:4b"
+    current: "qwen3.5:9b"
     default: "qwen3.5:9b"
     qwen3.5:4b:
       url: http://localhost:11434
