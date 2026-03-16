@@ -1,0 +1,20 @@
+agent_space:
+  path: "D:/AgentSpace"
+  max_mb: 10240
+
+permissions:
+  no_permissions_area:
+    - "D:/PythonCode/RainAgent/.venv"
+    - "D:/PythonCode/RainAgent/components"
+    - "D:/PythonCode/RainAgent/core"
+    - "D:/PythonCode/RainAgent/resources"
+    - "D:/PythonCode/RainAgent/system"
+    - "D:/PythonCode/RainAgent/utils"
+    - "D:/PythonCode/RainAgent/main.py"
+  space_file_read: true
+  space_file_write: true
+  all_file_read: false
+  all_file_write: false
+  if_need_write_or_read_ask_me: true
+  if_need_internet_ask_me: true
+  internet: true
