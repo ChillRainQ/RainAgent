@@ -2,14 +2,14 @@ default: local
 current: local
 local:
   list:
-    current: "qwen3.5:9b"
-    default: "qwen3.5:9b"
+    current: "qwen3.5:9b-q4_K_M"
+    default: "qwen3.5:9b-q4_K_M"
     qwen3.5:4b:
       url: http://localhost:11434
       ctx: 32768
       temperature: 0.8
       api_key: ollama
-    qwen3.5:9b:
+    qwen3.5:9b-q4_K_M:
       url: http://localhost:11434
       ctx: 32768
       temperature: 0.8

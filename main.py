@@ -27,7 +27,6 @@ class RainAgent:
 
     def init(self):
         self.system_prompt = file_util.read_file(constant.SYSTEM_PROMPT_TEXT_PATH)
-        self.tools_prompt = register.init()
         self.environment = SystemEnvironment(self.agent_config)
         self.environment_prompt = self.environment.to_prompt
         # self.work_space = WorkSpace(agent_config)
@@ -36,6 +35,7 @@ class RainAgent:
         self.tick()
 
     def tick(self):
+        self.tools_prompt = register.init()
         self.work_space_prompt_dir = work_space.dir_to_prompt
         if self.tools_prompt:
             self.system_prompt = self.system_prompt.replace("{tools}", self.tools_prompt)
@@ -85,40 +85,51 @@ class RainAgent:
             images = None
 
             if test:
-                print(f"{self.llm.chat(messages=question, images=None, think=False)}")
+                for token in self.llm.chat(messages=question, images=None, think=False, stream=True):
+                    print(token, end="", flush=True)
+                print()
+                continue
 
             while flag and not test:
                 kwargs = None
                 tool_name = None
 
                 if result is not None:
-                    content = self.llm.chat(messages=result, images=images, think=False)
+                    stream = self.llm.chat(messages=result, images=images, think=False, stream=True)
                 else:
-                    content = self.llm.chat(messages=question, images=None, think=False)
+                    stream = self.llm.chat(messages=question, images=None, think=False, stream=True)
 
-                # 重置images
                 images = None
 
-                # reply检测
-                if xml_util.has_tag(content, xml_util.REPLY_TAG):
-                    print(f"🤖 {xml_util.parse_xml(content, xml_util.REPLY_TAG)}")
-                    flag = False
-                    continue
+                # 流式收集
+                tokens = []
+                for token in stream:
+                    print(token, end="", flush=True)
+                    tokens.append(token)
+                print()
+                content = "".join(tokens)
 
                 # thought 检测
                 if xml_util.has_tag(content, xml_util.THOUGHT_TAG):
-                    print(f"\n\n💭 Thought: \n{xml_util.parse_xml(content, xml_util.THOUGHT_TAG)}")
+                    # print(f"\n💭 {xml_util.parse_xml(content, xml_util.THOUGHT_TAG)}")
+                    pass
+
+                # reply检测
+                if xml_util.has_tag(content, xml_util.REPLY_TAG):
+                    # print(f"\n🤖 {xml_util.parse_xml(content, xml_util.REPLY_TAG)}")
+                    flag = False
+                    continue
 
                 # action 检测
                 if xml_util.has_tag(content, xml_util.ACTION_TAG):
-                    print(f"\n\n💭 Action: \n{xml_util.parse_xml(content, xml_util.ACTION_TAG)}")
+                    # print(f"\n💭 Action: \n{xml_util.parse_xml(content, xml_util.ACTION_TAG)}")
                     tool_xml = xml_util.parse_xml(content, xml_util.ACTION_TAG)
                     tool_name, kwargs = self.parse_action(tool_xml)
                     action = True
 
                 # final_answer 检测
                 if xml_util.has_tag(content, xml_util.FINAL_ANSWER_TAG):
-                    print(f"✅ {xml_util.parse_xml(content, xml_util.FINAL_ANSWER_TAG)}")
+                    # print(f"\n✅ {xml_util.parse_xml(content, xml_util.FINAL_ANSWER_TAG)}")
                     flag = False
 
                 if action:
@@ -126,23 +137,89 @@ class RainAgent:
                         tool = register.get_tool(tool_name)
                         observation = tool.invoke(**kwargs)
 
-                        # 图片类型特殊处理
                         if tool_name == "file" and kwargs.get("action") == "read_image":
                             images = [observation]
                             result = template_util.create_observation_template("图片已读取，请分析图片内容")
-                            print(f"\n\n💭 Observation: \n图片已读取")
+                            print(f"\n💭 Observation: \n图片已读取")
                         else:
                             result = template_util.create_observation_template(observation)
-                            print(f"\n\n💭 Observation: \n{xml_util.parse_xml(result, xml_util.OBSERVATION_TAG)}")
+                            print(f"\n💭 Observation: \n{xml_util.parse_xml(result, xml_util.OBSERVATION_TAG)}")
 
                     except Exception as e:
                         result = template_util.create_observation_template(f"ERROR: {e}")
-                        print(f"\n\n💭 Observation: \n{xml_util.parse_xml(result, xml_util.OBSERVATION_TAG)}")
+                        print(f"\n💭 Observation: \n{xml_util.parse_xml(result, xml_util.OBSERVATION_TAG)}")
 
                     action = False
 
-                # 更新tick
                 self.tick()
+
+    # def run(self, test: bool = False):
+    #     while True:
+    #         question = input(">>>")
+    #         flag = True
+    #         action = False
+    #         result = None
+    #         images = None
+    #
+    #         if test:
+    #             print(f"{self.llm.chat(messages=question, images=None, think=False, stream=True)}")
+    #
+    #         while flag and not test:
+    #             kwargs = None
+    #             tool_name = None
+    #
+    #             if result is not None:
+    #                 content = self.llm.chat(messages=result, images=images, think=False, stream=True)
+    #             else:
+    #                 content = self.llm.chat(messages=question, images=None, think=False, stream=True)
+    #
+    #             # 重置images
+    #             images = None
+    #
+    #             # reply检测
+    #             if xml_util.has_tag(content, xml_util.REPLY_TAG):
+    #                 print(f"🤖 {xml_util.parse_xml(content, xml_util.REPLY_TAG)}")
+    #                 flag = False
+    #                 continue
+    #
+    #             # thought 检测
+    #             if xml_util.has_tag(content, xml_util.THOUGHT_TAG):
+    #                 print(f"\n\n💭 Thought: \n{xml_util.parse_xml(content, xml_util.THOUGHT_TAG)}")
+    #
+    #             # action 检测
+    #             if xml_util.has_tag(content, xml_util.ACTION_TAG):
+    #                 print(f"\n\n💭 Action: \n{xml_util.parse_xml(content, xml_util.ACTION_TAG)}")
+    #                 tool_xml = xml_util.parse_xml(content, xml_util.ACTION_TAG)
+    #                 tool_name, kwargs = self.parse_action(tool_xml)
+    #                 action = True
+    #
+    #             # final_answer 检测
+    #             if xml_util.has_tag(content, xml_util.FINAL_ANSWER_TAG):
+    #                 print(f"✅ {xml_util.parse_xml(content, xml_util.FINAL_ANSWER_TAG)}")
+    #                 flag = False
+    #
+    #             if action:
+    #                 try:
+    #                     tool = register.get_tool(tool_name)
+    #                     observation = tool.invoke(**kwargs)
+    #
+    #                     # 图片类型特殊处理
+    #                     if tool_name == "file" and kwargs.get("action") == "read_image":
+    #                         images = [observation]
+    #                         result = template_util.create_observation_template("图片已读取，请分析图片内容")
+    #                         print(f"\n\n💭 Observation: \n图片已读取")
+    #                     else:
+    #                         result = template_util.create_observation_template(observation)
+    #                         print(f"\n\n💭 Observation: \n{xml_util.parse_xml(result, xml_util.OBSERVATION_TAG)}")
+    #
+    #                 except Exception as e:
+    #                     result = template_util.create_observation_template(f"ERROR: {e}")
+    #                     print(f"\n\n💭 Observation: \n{xml_util.parse_xml(result, xml_util.OBSERVATION_TAG)}")
+    #
+    #                 action = False
+    #
+    #             # 更新tick
+    #             self.tick()
 
 
 

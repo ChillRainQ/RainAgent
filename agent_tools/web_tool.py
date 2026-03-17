@@ -8,10 +8,11 @@ class WebTool(BaseTool):
     name = "web"
     desc = "网络访问工具"
 
-    def invoke(self, type: str, **kwargs) -> str:
+    def invoke(self, **kwargs) -> str:
         res, err = self.permission_check(kwargs)
         if not res:
             return err
+        action = kwargs.pop("action", None)
         actions = {
             "search": self._search,
             "fetch": self._fetch,
@@ -19,9 +20,9 @@ class WebTool(BaseTool):
             "news": self._news,
             "wiki": self._wiki,
         }
-        func = actions.get(type)
+        func = actions.get(action)
         if func is None:
-            return f"ERROR: 不支持的操作: {type}"
+            return f"ERROR: 不支持的操作: {action}"
         try:
             return func(**kwargs)
         except requests.Timeout:
@@ -117,9 +118,6 @@ class WebTool(BaseTool):
             "    wiki(query: str, lang: str)  查询百科（lang默认zh，可选en）\n"
             "\n"
             "示例:\n"
-            "<web><type>search</type><query>AI news</query></web>\n"
-            "<web><type>fetch</type><url>https://example.com</url></web>\n"
-            "<web><type>weather</type><city>Harbin</city></web>\n"
-            "<web><type>news</type><query>今日科技新闻</query></web>\n"
-            "<web><type>wiki</type><query>Python</query></web>"
+            "<web><action>search</action><query>AI news</query></web>\n"
+
         )

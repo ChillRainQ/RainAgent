@@ -29,7 +29,7 @@ class BaseTool(ABC):
             res, err = permissions.has_write_permission(path)
             return res, err
         if action in internet_actions:
-            res, err = permissions.has_internet_permission(path)
+            res, err = permissions.has_internet_permission()
             return res, err
     def to_prompt(self) -> str:
         """生成工具的prompt描述"""

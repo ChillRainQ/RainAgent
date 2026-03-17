@@ -58,10 +58,38 @@ class LLM:
         )
         return response.message.content
 
-    def chat(self, messages: str, images: str = None, think: bool = False):
-        task = self._create_chat_task(messages, images, think)
+    def _chat_local_stream(self, messages: list, think: bool = False):
+        """流式生成器，逐token yield"""
+        for chunk in self.client.chat(
+                model=self.model_name,
+                messages=messages,
+                think=think,
+                stream=True,
+                options={
+                    "num_ctx": self.ctx,
+                    "temperature": self.temperature,
+                    "num_keep": 0,
+                }
+        ):
+            token = chunk.message.content
+            if token:
+                yield token
+
+    def chat(self, messages: str, images=None, think: bool = False, stream: bool = False):
+        task = self._create_chat_task(messages, images, think)  # 模板在里面构建
+
+        if stream:
+            def _stream_with_history():
+                result = []
+                for token in self._chat_local_stream(task, think=think):
+                    result.append(token)
+                    yield token
+                self._add_history("assistant", "".join(result), images=images)
+
+            return _stream_with_history()
+
         response = self._chat_local(task, think=think)
-        self._add_history("assistant", response, None)
+        self._add_history("assistant", response)
         return response
 
     def test(self):
