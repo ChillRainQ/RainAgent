@@ -42,7 +42,7 @@ class Permissions:
         except ValueError:
             return False
 
-    def has_read_permission(self, path: str) -> tuple[bool, str]:
+    def has_read_permission(self, action: str, path: str) -> tuple[bool, str]:
         """
         返回 (是否有权限, 原因)
         """
@@ -52,8 +52,10 @@ class Permissions:
             return True, ""
         if self.permission_map.get("all_file_read"):
             return True, ""
+        if self.permission_map.get(action):
+            return True, ""
         if self.permission_map.get("if_need_write_or_read_ask_me"):
-            return self.ask_permission("write", path), "正在请求权限"
+            return self.ask_permission("read", path), "正在请求权限"
         return False, f"无读取权限: {path}"
 
     def has_write_permission(self, path: str) -> tuple[bool, str]:

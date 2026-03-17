@@ -5,7 +5,17 @@ import shutil
 
 from agent_tools import register
 from agent_tools.register import BaseTool
-from utils import file_util
+from utils import file_util, xml_util
+
+
+def _capture(**_) -> str:
+    """截取全屏，返回 base64"""
+    import mss
+    with mss.mss() as sct:
+        monitor = sct.monitors[1]  # 1=主屏幕
+        img = sct.grab(monitor)
+        png = mss.tools.to_png(img.rgb, img.size)
+    return base64.b64encode(png).decode("utf-8")
 
 
 @register.register
@@ -17,9 +27,9 @@ class FileTool(BaseTool):
         res, err = self.permission_check(kwargs)
         if not res:
             return err
-        action = kwargs.pop("action", None)
+        action = kwargs.pop(xml_util.INVOKE_TAG, None)
         if action is None:
-            return f"{self.err}: 缺少 action 参数"
+            return f"{self.err}: 缺少 {xml_util.INVOKE_TAG} 参数"
         actions = {
             "read": self._read,
             "write": self._write,
@@ -30,6 +40,8 @@ class FileTool(BaseTool):
             "read_image": self._read_image,
             "copy": self._copy,  # ← 新增
             "copy_image": self._copy_image,
+            "capture": _capture,
+            "capture_region": self._capture_region,
         }
         func = actions.get(action)
         if func is None:
@@ -98,6 +110,20 @@ class FileTool(BaseTool):
         """复制二进制文件（图片等），本质上和 copy 一样，语义上更明确"""
         return self._copy(src, dst)
 
+    def _capture_region(self, x: str, y: str, width: str, height: str, **_) -> str:
+        """截取指定区域"""
+        import mss
+        region = {
+            "left": int(x),
+            "top": int(y),
+            "width": int(width),
+            "height": int(height),
+        }
+        with mss.mss() as sct:
+            img = sct.grab(region)
+            png = mss.tools.to_png(img.rgb, img.size)
+        return base64.b64encode(png).decode("utf-8")
+
     def to_prompt(self) -> str:
         return (
             "- file: 文件操作工具\n"
@@ -112,8 +138,11 @@ class FileTool(BaseTool):
             "    read_image(path: str)\n"
             "    copy(src: str, dst: str)        # 复制文件（文本或二进制）\n"
             "    copy_image(src: str, dst: str)  # 复制图片等二进制文件\n"
+            "    capture()                             截取全屏\n"
+            "    capture_region(x, y, width, height)   截取指定区域\n"
             "\n"
             "示例:\n"
-            "<file><action>read</action><path>D:/AgentSpace/test.txt</path></file>\n"
-            "<file><action>copy</action><src>D:/AgentSpace/a.txt</src><dst>D:/AgentSpace/b.txt</dst></file>\n"
+            "<file><invoke>read</invoke><path>D:/AgentSpace/test.txt</path></file>\n"
+            "<file><invoke>capture</invoke></file>\n"
+            "<file><invoke>copy</invoke><src>D:/AgentSpace/a.txt</src><dst>D:/AgentSpace/b.txt</dst></file>\n"
         )

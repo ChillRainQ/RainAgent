@@ -6,6 +6,8 @@ from core.config import LLMConfig
 from core.llm import LLM
 from system import constant
 from system.config import AgentConfig
+from system.planer import Planer
+from system.summarizer import Summarizer
 from utils import file_util, xml_util, template_util
 import xml.etree.ElementTree as ET
 import atexit
@@ -24,12 +26,17 @@ class RainAgent:
         self.environment = None
         self.work_space = None
         self.llm = LLM(llm_config)
+        self.planer = Planer()
+        self.summarizer = Summarizer()
 
     def init(self):
+        self.max_tool_invoke_times = self.agent_config.get("system").get("max_single_mission_cycle")
         self.system_prompt = file_util.read_file(constant.SYSTEM_PROMPT_TEXT_PATH)
         self.environment = SystemEnvironment(self.agent_config)
         self.environment_prompt = self.environment.to_prompt
         # self.work_space = WorkSpace(agent_config)
+        self.planer.init(self.llm)
+        self.summarizer.init(self.llm)
         work_space.init()
         permissions.init(config=agent_config)
         self.tick()
@@ -43,6 +50,8 @@ class RainAgent:
             self.system_prompt = self.system_prompt.replace("{system}", self.environment_prompt)
         if self.work_space_prompt_dir:
             self.system_prompt = self.system_prompt.replace("{work_dir}", self.work_space_prompt_dir)
+        if len(self.llm.history) > 50:
+            self.llm.compress_history(keep_last=20)
 
 
     def setup(self):
@@ -83,24 +92,21 @@ class RainAgent:
             action = False
             result = None
             images = None
-
+            times = 0
             if test:
                 for token in self.llm.chat(messages=question, images=None, think=False, stream=True):
                     print(token, end="", flush=True)
                 print()
                 continue
 
-            while flag and not test:
+            while flag and not test and times <= self.max_tool_invoke_times:
                 kwargs = None
                 tool_name = None
-
                 if result is not None:
                     stream = self.llm.chat(messages=result, images=images, think=False, stream=True)
                 else:
                     stream = self.llm.chat(messages=question, images=None, think=False, stream=True)
-
                 images = None
-
                 # 流式收集
                 tokens = []
                 for token in stream:
@@ -108,50 +114,41 @@ class RainAgent:
                     tokens.append(token)
                 print()
                 content = "".join(tokens)
-
-                # thought 检测
-                if xml_util.has_tag(content, xml_util.THOUGHT_TAG):
-                    # print(f"\n💭 {xml_util.parse_xml(content, xml_util.THOUGHT_TAG)}")
-                    pass
-
-                # reply检测
-                if xml_util.has_tag(content, xml_util.REPLY_TAG):
-                    # print(f"\n🤖 {xml_util.parse_xml(content, xml_util.REPLY_TAG)}")
-                    flag = False
-                    continue
-
                 # action 检测
                 if xml_util.has_tag(content, xml_util.ACTION_TAG):
-                    # print(f"\n💭 Action: \n{xml_util.parse_xml(content, xml_util.ACTION_TAG)}")
                     tool_xml = xml_util.parse_xml(content, xml_util.ACTION_TAG)
                     tool_name, kwargs = self.parse_action(tool_xml)
                     action = True
-
                 # final_answer 检测
                 if xml_util.has_tag(content, xml_util.FINAL_ANSWER_TAG):
-                    # print(f"\n✅ {xml_util.parse_xml(content, xml_util.FINAL_ANSWER_TAG)}")
                     flag = False
-
+                # 执行....
                 if action:
+                    times += 1
                     try:
                         tool = register.get_tool(tool_name)
                         observation = tool.invoke(**kwargs)
-
-                        if tool_name == "file" and kwargs.get("action") == "read_image":
-                            images = [observation]
-                            result = template_util.create_observation_template("图片已读取，请分析图片内容")
-                            print(f"\n💭 Observation: \n图片已读取")
+                        if tool_name == "file" and kwargs.get("invoke") in ("read_image", "capture", "capture_region"):
+                            if "ERROR" not in observation:
+                                images = [observation]
+                                result = template_util.create_observation_template("图片已读取，请分析图片内容")
+                                print(f"\n💭 Observation: \n图片已读取")
+                            else:
+                                print("ERROR")
                         else:
                             result = template_util.create_observation_template(observation)
                             print(f"\n💭 Observation: \n{xml_util.parse_xml(result, xml_util.OBSERVATION_TAG)}")
-
+                        if isinstance(tool, str):
+                            print(f"\n💭 Observation: \n{tool}")
                     except Exception as e:
                         result = template_util.create_observation_template(f"ERROR: {e}")
                         print(f"\n💭 Observation: \n{xml_util.parse_xml(result, xml_util.OBSERVATION_TAG)}")
-
                     action = False
-
                 self.tick()
+                if times >= self.max_tool_invoke_times * 0.75:
+                    result += f" <system>你还可以调用{self.max_tool_invoke_times - times}</system>"
+
+
 
     # def run(self, test: bool = False):
     #     while True:

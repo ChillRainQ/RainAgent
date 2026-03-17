@@ -18,3 +18,7 @@ permissions:
   if_need_write_or_read_ask_me: true
   if_need_internet_ask_me: true
   internet: true
+  capture: true
+
+system:
+  max_single_mission_cycle: 20

@@ -12,7 +12,7 @@ class WorkspaceTool(BaseTool):
 
     def invoke(self, **kwargs) -> str:
 
-        action = kwargs.pop("action", None)
+        action = kwargs.pop("invoke", None)
         if action is None:
             return f"{self.err}: 缺少 action 参数"
         actions = {
@@ -48,5 +48,5 @@ class WorkspaceTool(BaseTool):
             "    cd(path: str)\n"
             "\n"
             "示例:\n"
-            "<workspace><action>cd</action><path>D:/AgentSpace</path></workspace>\n"
+            "<workspace><invoke>cd</invoke><path>D:/AgentSpace</path></workspace>\n"
         )

@@ -5,6 +5,7 @@ ACTION_TAG: str = "action"
 OBSERVATION_TAG: str = "observation"
 FINAL_ANSWER_TAG: str = "final_answer"
 REPLY_TAG: str = "reply"
+INVOKE_TAG: str = "invoke"
 
 
 def parse_xml(text: str, tag: str) -> str | None:

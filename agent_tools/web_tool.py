@@ -1,6 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
 from agent_tools.register import register, BaseTool
+from utils import xml_util
 
 
 @register.register
@@ -12,7 +13,7 @@ class WebTool(BaseTool):
         res, err = self.permission_check(kwargs)
         if not res:
             return err
-        action = kwargs.pop("action", None)
+        action = kwargs.pop(xml_util.INVOKE_TAG, None)
         actions = {
             "search": self._search,
             "fetch": self._fetch,
@@ -118,6 +119,6 @@ class WebTool(BaseTool):
             "    wiki(query: str, lang: str)  查询百科（lang默认zh，可选en）\n"
             "\n"
             "示例:\n"
-            "<web><action>search</action><query>AI news</query></web>\n"
+            "<web><invoke>search</invoke><query>AI news</query></web>\n"
 
         )

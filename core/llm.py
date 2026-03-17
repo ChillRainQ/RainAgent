@@ -1,6 +1,7 @@
 import ollama
 
 from core.config import LLMConfig, CoreConstant
+from system.constant import COMPRESS_PROMPT
 from utils import template_util
 
 
@@ -84,13 +85,30 @@ class LLM:
                 for token in self._chat_local_stream(task, think=think):
                     result.append(token)
                     yield token
-                self._add_history("assistant", "".join(result), images=images)
+                self._add_history("assistant", "".join(result), images=None)
 
             return _stream_with_history()
 
         response = self._chat_local(task, think=think)
         self._add_history("assistant", response)
         return response
+    # def chat(self, messages: str, images=None, think: bool = False, stream: bool = False):
+    #     task = self._create_chat_task(messages, images, think)
+    #
+    #     if stream:
+    #         def _stream_with_history():
+    #             result = []
+    #             for token in self._chat_local_stream(task, think=think):
+    #                 result.append(token)
+    #                 yield token
+    #             # images 不存入 history，防止 base64 撑爆 context
+    #             self._add_history("assistant", "".join(result), images=None)
+    #
+    #         return _stream_with_history()
+    #
+    #     response = self._chat_local(task, think=think)
+    #     self._add_history("assistant", response, images=None)  # 同样不存图片
+    #     return response
 
     def test(self):
         message = self._build_message('user', '你好', None)
@@ -105,6 +123,33 @@ class LLM:
         if images:
             message["images"] = images
         return message
+
+    def compress_history(self, keep_last: int = 2):
+        """
+        压缩历史记录
+        keep_last: 保留最近几轮不压缩（保持短期记忆连贯）
+        """
+        if len(self.history) <= keep_last * 2:
+            return  # 历史太短，不需要压缩
+
+        # 最近 keep_last 轮保留，其余的压缩
+        to_compress = self.history[:-keep_last * 2]
+        to_keep = self.history[-keep_last * 2:]
+
+        # 把待压缩部分格式化成文本
+        history_text = "\n".join(
+            f"{msg['role']}: {msg['content']}"
+            for msg in to_compress
+        )
+        # 调用模型做摘要
+        summary = self._chat_local([
+            {"role": "system", "content": COMPRESS_PROMPT},
+            {"role": "user", "content": history_text},
+        ])
+        print(f"[DEBUG] 历史压缩: {len(to_compress)} 条 → 1 条摘要")
+        # 用摘要替换被压缩的部分
+        summary_msg = self._build_message("user", f"[历史摘要]\n{summary}", None)
+        self.history = [summary_msg] + to_keep
 
 
 if __name__ == "__main__":

@@ -1,9 +1,10 @@
 from abc import ABC, abstractmethod
 
 from components.permissions import permissions
+from utils import xml_util
 
 # 需要读取权限的操作
-read_actions = {"read", "read_image", "exists", "isdir", "ls"}
+read_actions = {"read", "read_image", "exists", "isdir", "ls", "capture", "capture_region"}
 # 需要写入权限的操作
 write_actions = {"write", "delete", "copy", "copy_image"}
 # 需要网络的操作
@@ -20,10 +21,10 @@ class BaseTool(ABC):
         pass
 
     def permission_check(self, kwargs):
-        action = kwargs.get("action", "")
+        action = kwargs.get(xml_util.INVOKE_TAG, "")
         path = kwargs.get("path", "")
         if action in read_actions:
-            res, err = permissions.has_read_permission(path)
+            res, err = permissions.has_read_permission(action, path)
             return res, err
         if action in write_actions:
             res, err = permissions.has_write_permission(path)
@@ -54,7 +55,7 @@ class ToolsRegister:
     def get_tool(self, name):
         tool = self.tools[name]
         if tool is None:
-            raise Exception(f"ERROR: 工具 {name} 不存在")
+            return f"ERROR: 工具 {name} 不存在"
         return tool
 
     def init(self):
