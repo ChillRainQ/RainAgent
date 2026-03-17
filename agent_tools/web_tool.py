@@ -67,13 +67,54 @@ class WebTool(BaseTool):
         return "\n".join(lines)[:4000]
 
     def _weather(self, city: str) -> str:
-        response = requests.get(
-            f"https://wttr.in/{city}",
-            params={"format": "3", "lang": "zh"},
-            headers={"User-Agent": "curl/7.68.0"},
+        # 城市名转经纬度
+        geo = requests.get(
+            "https://geocoding-api.open-meteo.com/v1/search",
+            params={"name": city, "count": 1, "language": "zh"},
             timeout=10
         )
-        return response.text.strip() or "未获取到天气信息"
+        results = geo.json().get("results")
+        if not results:
+            return f"ERROR: 找不到城市: {city}"
+
+        lat = results[0]["latitude"]
+        lon = results[0]["longitude"]
+        name = results[0].get("name", city)
+        country = results[0].get("country", "")
+
+        # 查天气
+        resp = requests.get(
+            "https://api.open-meteo.com/v1/forecast",
+            params={
+                "latitude": lat,
+                "longitude": lon,
+                "current_weather": True,
+                "hourly": "relativehumidity_2m,precipitation_probability",
+                "timezone": "auto",
+                "forecast_days": 1,
+            },
+            timeout=10
+        )
+        data = resp.json()
+        w = data["current_weather"]
+
+        code_map = {
+            0: "晴天", 1: "基本晴朗", 2: "部分多云", 3: "阴天",
+            45: "有雾", 48: "冻雾",
+            51: "小毛毛雨", 53: "中毛毛雨", 55: "大毛毛雨",
+            61: "小雨", 63: "中雨", 65: "大雨",
+            71: "小雪", 73: "中雪", 75: "大雪",
+            80: "小阵雨", 81: "中阵雨", 82: "强阵雨",
+            95: "雷暴", 99: "强雷暴",
+        }
+        desc = code_map.get(w["weathercode"], f"天气代码{w['weathercode']}")
+
+        return (
+            f"{name}, {country}\n"
+            f"天气: {desc}\n"
+            f"温度: {w['temperature']}°C\n"
+            f"风速: {w['windspeed']} km/h\n"
+        )
 
     def _news(self, query: str) -> str:
         response = requests.get(
@@ -93,11 +134,9 @@ class WebTool(BaseTool):
         return "\n".join(results) if results else "未找到新闻"
 
     def _wiki(self, query: str, lang: str = "zh") -> str:
-        """支持中英文百科，lang: zh=中文 en=英文"""
         url = f"https://{lang}.wikipedia.org/api/rest_v1/page/summary/{query}"
         response = requests.get(url, timeout=10)
         if response.status_code == 404:
-            # 中文没找到，尝试英文
             if lang == "zh":
                 return self._wiki(query, lang="en")
             return "未找到百科信息"
@@ -120,5 +159,4 @@ class WebTool(BaseTool):
             "\n"
             "示例:\n"
             "<web><invoke>search</invoke><query>AI news</query></web>\n"
-
         )

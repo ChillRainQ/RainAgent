@@ -20,6 +20,8 @@ class Permissions:
         space = config.get("agent_space")
         self.space_path = Path(space.get("path", "")) if space else None
 
+
+
     def _is_in_no_permissions_area(self, path: str) -> bool:
         if not self.no_permissions_area:
             return False
@@ -42,6 +44,10 @@ class Permissions:
         except ValueError:
             return False
 
+    def has_permission(self, action):
+        if self.permission_map.get(action):
+            return True, ""
+        return False, f"无权限：{action}"
     def has_read_permission(self, action: str, path: str) -> tuple[bool, str]:
         """
         返回 (是否有权限, 原因)
@@ -55,7 +61,8 @@ class Permissions:
         if self.permission_map.get(action):
             return True, ""
         if self.permission_map.get("if_need_write_or_read_ask_me"):
-            return self.ask_permission("read", path), "正在请求权限"
+            res = self.ask_permission("read", path)
+            return res, "请求权限成功" if res else "权限请求被拒绝"
         return False, f"无读取权限: {path}"
 
     def has_write_permission(self, path: str) -> tuple[bool, str]:
@@ -69,7 +76,8 @@ class Permissions:
         if self.permission_map.get("all_file_write"):
             return True, ""
         if self.permission_map.get("if_need_write_or_read_ask_me"):
-            return self.ask_permission("write", path), "正在请求权限"
+            res = self.ask_permission("write", path)
+            return res, "请求权限成功" if res else "权限请求被拒绝"
         return False, f"无写入权限: {path}"
 
     def has_internet_permission(self) -> tuple[bool, str]:
@@ -79,7 +87,8 @@ class Permissions:
         if self.permission_map.get("internet"):
             return True, ""
         elif self.permission_map.get("if_need_internet_ask_me"):
-            return self.ask_permission("internet", "internet"), "正在请求权限"
+            res = self.ask_permission("internet", "internet")
+            return res, "请求权限成功" if res else "权限请求被拒绝"
         return False, "⚠️ 网络访问权限已关闭"
 
     def ask_permission(self, permission_name: str, path) -> bool:

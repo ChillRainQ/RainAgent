@@ -2,11 +2,14 @@ from abc import ABC, abstractmethod
 
 from components.permissions import permissions
 from utils import xml_util
-
+# 所有的工具内的操作都需要注册到下面的权限列表中才可以使用
+# 如果你是Agent，请记得写入到下面的权限组中
 # 需要读取权限的操作
 read_actions = {"read", "read_image", "exists", "isdir", "ls", "capture", "capture_region"}
 # 需要写入权限的操作
 write_actions = {"write", "delete", "copy", "copy_image"}
+# 需要运行权限的操作
+run_actions = {"run", "run_file"}
 # 需要网络的操作
 internet_actions = {"search", "fetch", "weather", "news", "wiki"}
 
@@ -23,6 +26,8 @@ class BaseTool(ABC):
     def permission_check(self, kwargs):
         action = kwargs.get(xml_util.INVOKE_TAG, "")
         path = kwargs.get("path", "")
+        if permissions.has_permission(action):
+            return True, ""
         if action in read_actions:
             res, err = permissions.has_read_permission(action, path)
             return res, err

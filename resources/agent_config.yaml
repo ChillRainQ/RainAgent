@@ -19,6 +19,8 @@ permissions:
   if_need_internet_ask_me: true
   internet: true
   capture: true
+  run: true
+  run_file: true
 
 system:
   max_single_mission_cycle: 20
