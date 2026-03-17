@@ -93,13 +93,7 @@ class RainAgent:
             result = None
             images = None
             times = 0
-            if test:
-                for token in self.llm.chat(messages=question, images=None, think=False, stream=True):
-                    print(token, end="", flush=True)
-                print()
-                continue
-
-            while flag and not test and times <= self.max_tool_invoke_times:
+            while flag  and times <= self.max_tool_invoke_times:
                 kwargs = None
                 tool_name = None
                 if result is not None:
