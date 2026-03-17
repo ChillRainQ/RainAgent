@@ -1,6 +1,7 @@
 import os
 import os.path
 import base64
+import shutil
 
 from agent_tools import register
 from agent_tools.register import BaseTool
@@ -27,6 +28,8 @@ class FileTool(BaseTool):
             "isdir": self._isdir,
             "ls": self._ls,
             "read_image": self._read_image,
+            "copy": self._copy,  # ← 新增
+            "copy_image": self._copy_image,
         }
         func = actions.get(action)
         if func is None:
@@ -79,6 +82,22 @@ class FileTool(BaseTool):
         with open(path, "rb") as f:
             return base64.b64encode(f.read()).decode("utf-8")
 
+    def _copy(self, src: str, dst: str) -> str:
+        """复制文本文件"""
+        if not os.path.exists(src):
+            return f"{self.err}: 源文件不存在"
+        if os.path.isdir(src):
+            return f"{self.err}: 源路径是目录，请使用 copy_dir"
+        dst_dir = os.path.dirname(dst)
+        if dst_dir:
+            os.makedirs(dst_dir, exist_ok=True)
+        shutil.copy2(src, dst)  # copy2 会保留元数据
+        return "复制成功"
+
+    def _copy_image(self, src: str, dst: str) -> str:
+        """复制二进制文件（图片等），本质上和 copy 一样，语义上更明确"""
+        return self._copy(src, dst)
+
     def to_prompt(self) -> str:
         return (
             "- file: 文件操作工具\n"
@@ -91,7 +110,10 @@ class FileTool(BaseTool):
             "    isdir(path: str)\n"
             "    ls(path: str)\n"
             "    read_image(path: str)\n"
+            "    copy(src: str, dst: str)        # 复制文件（文本或二进制）\n"
+            "    copy_image(src: str, dst: str)  # 复制图片等二进制文件\n"
             "\n"
             "示例:\n"
             "<file><action>read</action><path>D:/AgentSpace/test.txt</path></file>\n"
+            "<file><action>copy</action><src>D:/AgentSpace/a.txt</src><dst>D:/AgentSpace/b.txt</dst></file>\n"
         )

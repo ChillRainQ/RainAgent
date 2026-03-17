@@ -80,9 +80,12 @@ AgentSpace: D:/AgentSpace
     isdir(path: str)
     ls(path: str)
     read_image(path: str)
+    copy(src: str, dst: str)        # 复制文件（文本或二进制）
+    copy_image(src: str, dst: str)  # 复制图片等二进制文件
 
 示例:
 <file><action>read</action><path>D:/AgentSpace/test.txt</path></file>
+<file><action>copy</action><src>D:/AgentSpace/a.txt</src><dst>D:/AgentSpace/b.txt</dst></file>
 
 - web: 网络访问工具
   支持操作:

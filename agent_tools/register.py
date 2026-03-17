@@ -5,7 +5,7 @@ from components.permissions import permissions
 # 需要读取权限的操作
 read_actions = {"read", "read_image", "exists", "isdir", "ls"}
 # 需要写入权限的操作
-write_actions = {"write", "delete"}
+write_actions = {"write", "delete", "copy", "copy_image"}
 # 需要网络的操作
 internet_actions = {"search", "fetch", "weather", "news", "wiki"}
 

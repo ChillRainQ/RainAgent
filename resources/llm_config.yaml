@@ -6,12 +6,12 @@ local:
     default: "qwen3.5:9b-q4_K_M"
     qwen3.5:4b:
       url: http://localhost:11434
-      ctx: 32768
+      ctx: 262144
       temperature: 0.8
       api_key: ollama
     qwen3.5:9b-q4_K_M:
       url: http://localhost:11434
-      ctx: 32768
+      ctx: 262144
       temperature: 0.8
       api_key: ollama
 cloud:
@@ -20,12 +20,12 @@ cloud:
     default: chatgpt
     deepseek:
       url: https://api.deepseek.com/v1
-      ctx: 32768
+      ctx: 262144
       api_key:
       temperature: 0.8
     chatgpt:
       url: https://api.openai.com/v1
-      ctx: 32768
+      ctx: 262144
       api_key:
       temperature: 0.8
 
