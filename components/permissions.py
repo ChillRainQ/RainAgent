@@ -20,16 +20,40 @@ class Permissions:
         space = config.get("agent_space")
         self.space_path = Path(space.get("path", "")) if space else None
 
+    def _normalize_path(self, path: str) -> Path | None:
+        if path is None:
+            return None
+        p = str(path).strip()
+        if not p:
+            return None
+        # remove surrounding quotes
+        if (p.startswith('"') and p.endswith('"')) or (p.startswith("'") and p.endswith("'")):
+            p = p[1:-1].strip()
+        p = os.path.expandvars(p)
+        try:
+            # strict=False tolerates non-existing paths; important for "planned" writes
+            return Path(p).expanduser().resolve(strict=False)
+        except Exception:
+            # fallback: best-effort absolute path without resolving
+            try:
+                return Path(os.path.abspath(p))
+            except Exception:
+                return None
+
 
 
     def _is_in_no_permissions_area(self, path: str) -> bool:
         if not self.no_permissions_area:
             return False
-        resolved_path = Path(path).resolve()
+        resolved_path = self._normalize_path(path)
+        if not resolved_path:
+            return False
         for no_perm in self.no_permissions_area:
             try:
-                resolved_path.relative_to(no_perm.resolve())
-                return True
+                base = no_perm.expanduser().resolve(strict=False)
+                # robust prefix check (case-normalized on Windows)
+                if os.path.commonpath([os.path.normcase(str(resolved_path)), os.path.normcase(str(base))]) == os.path.normcase(str(base)):
+                    return True
             except ValueError:
                 continue
         return False
@@ -38,10 +62,14 @@ class Permissions:
         """是否在agent空间内"""
         if not self.space_path:
             return False
+        resolved_path = self._normalize_path(path)
+        if not resolved_path:
+            return False
+        base = self.space_path.expanduser().resolve(strict=False)
         try:
-            Path(path).resolve().relative_to(self.space_path.resolve())
-            return True
+            return os.path.commonpath([os.path.normcase(str(resolved_path)), os.path.normcase(str(base))]) == os.path.normcase(str(base))
         except ValueError:
+            # Different drives on Windows => not in space
             return False
 
     def has_permission(self, action):

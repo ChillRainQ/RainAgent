@@ -11,6 +11,7 @@ from system.summarizer import Summarizer
 from utils import file_util, xml_util, template_util
 import xml.etree.ElementTree as ET
 import atexit
+import os
 llm_config = LLMConfig()
 agent_config = AgentConfig()
 work_space = WorkSpace(agent_config)
@@ -71,19 +72,64 @@ class RainAgent:
 
     def parse_action(self, action_raw: str) -> tuple[str, dict] | tuple[None, None]:
         try:
-            # 处理CDATA
             import re
-            action_raw = re.sub(r'<!\[CDATA\[(.*?)\]\]>',
-                                lambda m: m.group(1).replace('<', '&lt;').replace('>', '&gt;'),
-                                action_raw, flags=re.DOTALL)
+
+            def _escape_xml_text(s: str) -> str:
+                return (
+                    s.replace("&", "&amp;")
+                    .replace("<", "&lt;")
+                    .replace(">", "&gt;")
+                )
+
+            # 1) 对“应当是纯文本”的字段做转义，避免内容里的 <action> / <path> 等破坏 XML 结构
+            #    常见字段：content / code / cmd
+            def _escape_tag_inner(tag: str, raw: str) -> str:
+                pattern = rf"<{tag}>(.*?)</{tag}>"
+
+                def repl(m):
+                    inner = m.group(1)
+                    # 若已经显式使用 CDATA，则不重复处理（交给后续 CDATA 处理）
+                    if "<![CDATA[" in inner:
+                        return m.group(0)
+                    return f"<{tag}>{_escape_xml_text(inner)}</{tag}>"
+
+                return re.sub(pattern, repl, raw, flags=re.DOTALL)
+
+            action_raw = _escape_tag_inner("content", action_raw)
+            action_raw = _escape_tag_inner("code", action_raw)
+            action_raw = _escape_tag_inner("cmd", action_raw)
+
+            # 2) 处理CDATA（兼容：把 CDATA 里的尖括号转义，避免某些解析器/上游处理造成混淆）
+            action_raw = re.sub(
+                r"<!\[CDATA\[(.*?)\]\]>",
+                lambda m: _escape_xml_text(m.group(1)),
+                action_raw,
+                flags=re.DOTALL,
+            )
+
             root = ET.fromstring(action_raw.strip())
             tool_name = root.tag
             kwargs = {child.tag: child.text for child in root}
             return tool_name, kwargs
         except ET.ParseError as e:
-            print(f"[DEBUG] ET.ParseError: {e}")
-            print(f"[DEBUG] action_raw: {action_raw}")
-            return None, None
+            # Fallback: tolerate missing closing tags or minor malformation.
+            try:
+                from bs4 import BeautifulSoup
+
+                soup = BeautifulSoup(action_raw, "html.parser")
+                first = soup.find(True)
+                if not first:
+                    return None, None
+                tool_name = first.name
+                kwargs = {}
+                for child in first.find_all(recursive=False):
+                    if getattr(child, "name", None):
+                        kwargs[child.name] = child.get_text()
+                return tool_name, kwargs
+            except Exception:
+                print(f"[DEBUG] ET.ParseError: {e}")
+                print(f"[DEBUG] action_raw: {action_raw}")
+                return None, None
 
     def run(self, test: bool = False):
         while True:
@@ -93,6 +139,7 @@ class RainAgent:
             result = None
             images = None
             times = 0
+            pending_skill: str | None = None
             while flag  and times <= self.max_tool_invoke_times:
                 kwargs = None
                 tool_name = None
@@ -111,17 +158,51 @@ class RainAgent:
                 # action 检测
                 if xml_util.has_tag(content, xml_util.ACTION_TAG):
                     tool_xml = xml_util.parse_xml(content, xml_util.ACTION_TAG)
-                    tool_name, kwargs = self.parse_action(tool_xml)
-                    action = True
+                    if tool_xml:
+                        tool_name, kwargs = self.parse_action(tool_xml)
+                        action = bool(tool_name)
                 # final_answer 检测
                 if xml_util.has_tag(content, xml_util.FINAL_ANSWER_TAG):
-                    flag = False
+                    # If a skill file was written, enforce index registration before finishing.
+                    if pending_skill:
+                        hint = (
+                            f"ERROR: skill `{pending_skill}` 已生成但尚未注册到 `list.md`。\n"
+                            f"请在项目根目录 `list.md` 追加一行：\n"
+                            f"{pending_skill}:  <一句话功能描述>\n"
+                            f"完成注册后再输出 <final_answer>。"
+                        )
+                        result = template_util.create_observation_template(hint)
+                        action = False
+                        flag = True
+                    else:
+                        flag = False
                 # 执行....
                 if action:
                     times += 1
                     try:
                         tool = register.get_tool(tool_name)
-                        observation = tool.invoke(**kwargs)
+                        if isinstance(tool, str):
+                            observation = tool
+                        else:
+                            observation = tool.invoke(**kwargs)
+
+                        # Track "skill written but not indexed" to prevent premature stop.
+                        try:
+                            if tool_name == "file" and kwargs and kwargs.get("invoke") == "write":
+                                path = (kwargs.get("path") or "").strip()
+                                content_text = kwargs.get("content") or ""
+                                if path.lower().endswith(".md") and os.path.basename(path).lower() != "list.md":
+                                    import re
+
+                                    m = re.search(r"^\\s*##\\s*Skill:\\s*([A-Za-z0-9_]+)\\s*$", content_text, re.MULTILINE)
+                                    if m:
+                                        pending_skill = m.group(1)
+                                if os.path.basename(path).lower() == "list.md" and pending_skill:
+                                    if pending_skill in content_text:
+                                        pending_skill = None
+                        except Exception:
+                            pass
+
                         if tool_name == "file" and kwargs.get("invoke") in ("read_image", "capture", "capture_region"):
                             if "ERROR" not in observation:
                                 images = [observation]
@@ -132,8 +213,6 @@ class RainAgent:
                         else:
                             result = template_util.create_observation_template(observation)
                             print(f"\n💭 Observation: \n{xml_util.parse_xml(result, xml_util.OBSERVATION_TAG)}")
-                        if isinstance(tool, str):
-                            print(f"\n💭 Observation: \n{tool}")
                     except Exception as e:
                         result = template_util.create_observation_template(f"ERROR: {e}")
                         print(f"\n💭 Observation: \n{xml_util.parse_xml(result, xml_util.OBSERVATION_TAG)}")

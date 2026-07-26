@@ -5,11 +5,32 @@ from utils import xml_util
 # 所有的工具内的操作都需要注册到下面的权限列表中才可以使用
 # 如果你是Agent，请记得写入到下面的权限组中
 # 需要读取权限的操作
-read_actions = {"read", "read_image", "exists", "isdir", "ls", "capture", "capture_region"}
+read_actions = {
+    "read",
+    "read_image",
+    "exists",
+    "isdir",
+    "ls",
+    "capture",
+    "capture_region",
+    # codebase search
+    "grep",
+    "glob",
+}
 # 需要写入权限的操作
-write_actions = {"write", "delete", "copy", "copy_image"}
+write_actions = {
+    "write",
+    "delete",
+    "copy",
+    "copy_image",
+    # safe edits
+    "replace",
+}
 # 需要运行权限的操作
-run_actions = {"run", "run_file"}
+run_actions = {
+    "run",
+    "run_file",
+}
 # 需要网络的操作
 internet_actions = {"search", "fetch", "weather", "news", "wiki"}
 
@@ -26,10 +47,23 @@ class BaseTool(ABC):
     def permission_check(self, kwargs):
         action = kwargs.get(xml_util.INVOKE_TAG, "")
         path = kwargs.get("path", "")
-        if permissions.has_permission(action):
+        # Map tool-specific invokes to coarse-grained permissions.
+        # This avoids requiring every new invoke name to be added into YAML.
+        permission_action = action
+        if action in read_actions:
+            permission_action = "read"
+        elif action in write_actions:
+            permission_action = "write"
+        elif action in run_actions:
+            permission_action = "run"
+        elif action in internet_actions:
+            permission_action = "internet"
+
+        allowed, _ = permissions.has_permission(permission_action)
+        if allowed:
             return True, ""
         if action in read_actions:
-            res, err = permissions.has_read_permission(action, path)
+            res, err = permissions.has_read_permission(permission_action, path)
             return res, err
         if action in write_actions:
             res, err = permissions.has_write_permission(path)
@@ -37,6 +71,7 @@ class BaseTool(ABC):
         if action in internet_actions:
             res, err = permissions.has_internet_permission()
             return res, err
+        return False, f"无权限或未知操作：{action}"
     def to_prompt(self) -> str:
         """生成工具的prompt描述"""
         if self.params:
@@ -58,7 +93,7 @@ class ToolsRegister:
         return cls
 
     def get_tool(self, name):
-        tool = self.tools[name]
+        tool = self.tools.get(name)
         if tool is None:
             return f"ERROR: 工具 {name} 不存在"
         return tool

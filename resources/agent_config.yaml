@@ -13,8 +13,8 @@ permissions:
     - "D:/PythonCode/RainAgent/main.py"
   space_file_read: true
   space_file_write: true
-  all_file_read: false
-  all_file_write: false
+  all_file_read: true
+  all_file_write: true
   if_need_write_or_read_ask_me: true
   if_need_internet_ask_me: true
   internet: true
